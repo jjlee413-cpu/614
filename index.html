@@ -78,11 +78,17 @@ body{background:#f0f4fb;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-s
 .width-panel input[type=range]{width:130px;accent-color:#2563eb;cursor:pointer;}
 .width-panel .w-val{min-width:42px;text-align:right;color:#2563eb;font-weight:900;}
 
-.pwa-install-wrap{position:fixed;right:12px;bottom:92px;z-index:10020}
-.pwa-install-btn{display:none;border:0;border-radius:999px;padding:11px 14px;background:#173b73;color:white;font-weight:900;
- box-shadow:0 4px 16px rgba(0,0,0,.18);cursor:pointer}
-.pwa-install-btn.show{display:block}
-@media(max-width:768px){.pwa-install-wrap{right:10px;bottom:92px}.pwa-install-btn{font-size:12px;padding:10px 13px}}
+.study-backup-box{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0;padding:8px;border:1px dashed #cbd5e1;border-radius:10px}
+.study-backup-box button{border:0;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer;min-height:40px}
+.backup-btn{background:#0f766e;color:#fff}.restore-btn{background:#7c3aed;color:#fff}.reset-btn{background:#fee2e2;color:#991b1b}
+#studyRestoreInput{display:none}
+@media(max-width:768px){.study-backup-box{display:grid;grid-template-columns:1fr 1fr}.study-backup-box button{width:100%;min-height:44px}.study-backup-box .reset-btn{grid-column:1/-1}}
+
+
+@media(max-width:768px){
+ .qd-actions .backup-btn{background:#0f766e!important;color:#fff!important}
+ .qd-actions .restore-btn{background:#7c3aed!important;color:#fff!important}
+}
 
 </style>
 <style id="quiz-style">
@@ -228,6 +234,13 @@ button,select,input{touch-action:manipulation} button{min-height:44px}.mobile-on
 }
 
 </style>
+<style>
+.pwa-install-wrap{position:fixed;right:12px;bottom:92px;z-index:10020}
+.pwa-install-btn{display:none;border:0;border-radius:999px;padding:11px 14px;background:#173b73;color:white;font-weight:900;
+ box-shadow:0 4px 16px rgba(0,0,0,.18);cursor:pointer}
+.pwa-install-btn.show{display:block}
+@media(max-width:768px){.pwa-install-wrap{right:10px;bottom:92px}.pwa-install-btn{font-size:12px;padding:10px 13px}}
+</style>
 
 <meta name="theme-color" content="#173b73">
 <meta name="mobile-web-app-capable" content="yes">
@@ -261,6 +274,11 @@ button,select,input{touch-action:manipulation} button{min-height:44px}.mobile-on
 <button class="note-btn" onclick="openMasterNotes()">📒 핵심노트</button>
 <button class="memory-btn" onclick="openMemoryNotes()">🧠 헷갈림 암기노트</button>
 <button class="ghost" onclick="showAllCards()">목록 보기</button>
+
+<button class="backup-btn" onclick="exportStudyProgress()">💾 기록 저장</button>
+<button class="restore-btn" onclick="document.getElementById('studyRestoreInput').click()">📥 기록 불러오기</button>
+<input id="studyRestoreInput" type="file" accept=".json,application/json" style="display:none" onchange="importStudyProgress(this.files[0])">
+
 <button class="danger" onclick="resetProgress()">기록 초기화</button>
 </div>
 
@@ -18277,6 +18295,7 @@ button,select,input{touch-action:manipulation} button{min-height:44px}.mobile-on
  <div id="memoryList"></div>
 </div>
 
+
 <div class="width-panel">
 <span>📐 폭</span>
 <input max="1300" min="560" oninput="setWidth(this.value)" type="range" value="860"/>
@@ -18662,29 +18681,37 @@ window.addEventListener('scroll',()=>{clearTimeout(window.__mbt);window.__mbt=se
 window.addEventListener('load',updateMobileStar);
 
 
-// ===== PWA install / offline =====
-let deferredInstallPrompt=null;
-window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();
-  deferredInstallPrompt=e;
-  document.getElementById('pwaInstallBtn')?.classList.add('show');
-});
-document.getElementById('pwaInstallBtn')?.addEventListener('click',async()=>{
-  if(deferredInstallPrompt){
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt=null;
-    document.getElementById('pwaInstallBtn')?.classList.remove('show');
-  }else{
-    alert('iPhone/iPad에서는 Safari의 공유 버튼 → “홈 화면에 추가”를 선택하세요.');
-  }
-});
-window.addEventListener('appinstalled',()=>{
-  document.getElementById('pwaInstallBtn')?.classList.remove('show');
-});
-if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-}
+window.exportStudyProgress=function(){
+ try{
+  const prog=window.__nclexApi?.getProg?.()||JSON.parse(localStorage.getItem('nclex641_quiz_v1')||'{}');
+  const data={app:'NCLEX-RN-641',version:1,exportedAt:new Date().toISOString(),progress:prog};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'),u=URL.createObjectURL(blob),d=new Date(),p=n=>String(n).padStart(2,'0');
+  a.href=u;a.download=`NCLEX641_학습기록_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+  alert('학습기록 백업 파일을 저장했습니다.');
+ }catch(e){console.error(e);alert('백업 중 오류가 발생했습니다.');}
+};
+window.importStudyProgress=function(file){
+ if(!file)return;
+ const r=new FileReader();
+ r.onload=function(){
+  try{
+   const raw=JSON.parse(r.result), imported=raw.progress||raw;
+   if(!imported||typeof imported!=='object'||Array.isArray(imported))throw Error();
+   const n=Object.keys(imported).filter(k=>/^q\d+$/i.test(k)).length;
+   if(!confirm(`학습기록 ${n}개를 복원할까요? 현재 기록은 덮어씌워집니다.`))return;
+   localStorage.setItem('nclex641_quiz_v1',JSON.stringify(imported));
+   const cur=window.__nclexApi?.getProg?.();
+   if(cur){Object.keys(cur).forEach(k=>delete cur[k]);Object.assign(cur,imported);try{window.__nclexApi.saveProg?.()}catch(_){}}
+   alert('복원 완료. 화면을 새로고침합니다.');location.reload();
+  }catch(e){alert('올바른 NCLEX 641 학습기록 파일이 아닙니다.');}
+ };
+ r.readAsText(file,'utf-8');
+};
+window.resetStudyProgress=function(){
+ if(confirm("모든 학습기록을 초기화할까요? 필요하면 먼저 백업하세요.")){localStorage.removeItem('nclex641_quiz_v1');location.reload();}
+};
 
 </script>
 
@@ -18694,6 +18721,34 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   <button class="mb-next" onclick="mobileNext()">다음 →</button>
 </div>
 
+
+<script>
+// ===== PWA install / offline =====
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  document.getElementById('pwaInstallBtn')?.classList.add('show');
+});
+window.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('pwaInstallBtn')?.addEventListener('click',async()=>{
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt=null;
+      document.getElementById('pwaInstallBtn')?.classList.remove('show');
+    }else{
+      alert('브라우저 메뉴에서 “홈 화면에 추가” 또는 “앱 설치”를 선택해 주세요.');
+    }
+  });
+});
+window.addEventListener('appinstalled',()=>{
+  document.getElementById('pwaInstallBtn')?.classList.remove('show');
+});
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script>
 
 <div class="pwa-install-wrap">
   <button id="pwaInstallBtn" class="pwa-install-btn">📲 홈 화면에 설치</button>
